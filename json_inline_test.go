@@ -26,7 +26,7 @@ type USA struct {
 	State string `json:"state,omitempty"`
 }
 
-func Test(t *testing.T) {
+func TestMarshaler(t *testing.T) {
 	users := []User{
 		{
 			ID:    1,
@@ -67,5 +67,43 @@ func Test(t *testing.T) {
 		if !strings.Contains(output, substr) {
 			t.Errorf("Expected output to contain %q, but it did not.\nOutput: %s", substr, output)
 		}
+	}
+}
+
+func TestUnmarshaler(t *testing.T) {
+	jsonData := `[
+  {
+	"id": 1,
+	"name": "Alice",
+	"email": "alice@example.com",
+	"province": "Guangdong",
+	"city": "Shenzhen"
+  },
+  {
+	"id": 2,
+	"name": "Bob",
+	"email": "bob@example.com",
+	"state": "California",
+	"city": "Los Angeles"
+  }
+]`
+
+	var users []*User
+	if err := json.Unmarshal([]byte(jsonData), jsoninline.V(&users)); err != nil {
+		t.Fatalf("Failed to unmarshal users: %v", err)
+	}
+
+	if len(users) != 2 {
+		t.Fatalf("Expected 2 users, got %d", len(users))
+	}
+
+	alice := users[0]
+	if alice.China == nil || alice.China.Province != "Guangdong" || alice.China.City != "Shenzhen" {
+		t.Errorf("Alice's China info not unmarshaled correctly: %+v", alice.China)
+	}
+
+	bob := users[1]
+	if bob.USA == nil || bob.USA.State != "California" || bob.USA.City != "Los Angeles" {
+		t.Errorf("Bob's USA info not unmarshaled correctly: %+v", bob.USA)
 	}
 }
