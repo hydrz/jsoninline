@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/hydrz/jsoninline"
 )
@@ -28,11 +29,16 @@ type ServerOptions struct {
 
 type UDPDNSServerOption struct {
 	ServerOptions
+	DialerOption DialerOption `json:",inline"`
 }
 
 type TLSDNSServerOption struct {
 	ServerOptions
 	TLS any `json:"tls,omitempty"`
+}
+
+type DialerOption struct {
+	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
 func main() {
@@ -51,6 +57,9 @@ func main() {
 				ServerOptions: ServerOptions{
 					Server:     "1.1.1.1",
 					ServerPort: 53,
+				},
+				DialerOption: DialerOption{
+					Timeout: 10 * time.Second,
 				},
 			},
 		},

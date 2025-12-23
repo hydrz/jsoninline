@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
-	"strings"
 )
 
 func V(v any) *InlineMarshaler {
@@ -71,13 +70,12 @@ func marshal(p any) ([]byte, error) {
 			continue
 		}
 
-		tag := field.Tag.Get("json")
-		if tag == "-" {
+		info := fieldJSONInfo(field)
+		if info.omit {
 			continue
 		}
 
-		parts := strings.Split(tag, ",")
-		name := parts[0]
+		name := info.name
 		if name == "" {
 			name = field.Name
 		}
@@ -85,13 +83,13 @@ func marshal(p any) ([]byte, error) {
 		fv := v.Field(i)
 
 		// handle inline fields
-		if strings.Contains(tag, ",inline") {
+		if info.settings["inline"] {
 			if fv.Kind() == reflect.Ptr {
 				if fv.IsNil() {
 					continue
 				}
 			}
-			inlineBytes, err := json.Marshal(fv.Interface())
+			inlineBytes, err := marshal(fv.Interface())
 			if err != nil {
 				return nil, err
 			}
@@ -102,12 +100,14 @@ func marshal(p any) ([]byte, error) {
 			for k, v := range inlineMap {
 				m[k] = v
 			}
-			delete(m, name)
+			if name != "" {
+				delete(m, name)
+			}
 			continue
 		}
 
 		if fv.Kind() == reflect.Ptr && fv.IsNil() {
-			if strings.Contains(tag, "omitempty") {
+			if info.settings["omitempty"] {
 				continue
 			}
 			m[name] = nil
@@ -232,20 +232,19 @@ func unmarshal(data []byte, p any) error {
 			continue
 		}
 
-		tag := field.Tag.Get("json")
-		if tag == "-" {
+		info := fieldJSONInfo(field)
+		if info.omit {
 			continue
 		}
 
-		parts := strings.Split(tag, ",")
-		name := parts[0]
+		name := info.name
 		if name == "" {
 			name = field.Name
 		}
 
 		fv := out.Field(i)
 
-		if strings.Contains(tag, ",inline") {
+		if info.settings["inline"] {
 			// For inline fields, unmarshal the whole object into the inline struct.
 			if fv.Kind() == reflect.Ptr {
 				fv.Set(reflect.New(fv.Type().Elem()))
