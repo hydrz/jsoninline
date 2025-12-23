@@ -75,31 +75,30 @@ func TestMarshaler(t *testing.T) {
 	// check output contains inlined fields
 	output := string(nestedBytes)
 
-	unexpectedSubstrings := []string{
-		`"China":`,
-		`"USA":`,
-		`"NestedFoo":`,
-		`"NestedBar":`,
+	tests := []struct {
+		substr   string
+		expected bool
+	}{
+		{`"China":`, false},
+		{`"USA":`, false},
+		{`"NestedFoo":`, false},
+		{`"NestedBar":`, false},
+		{`"province": "Guangdong"`, true},
+		{`"city": "Shenzhen"`, true},
+		{`"state": "California"`, true},
+		{`"city": "Los Angeles"`, true},
+		{`"foo_field": "FooValue"`, true},
+		{`"bar_field": "BarValue"`, true},
 	}
 
-	for _, substr := range unexpectedSubstrings {
-		if strings.Contains(output, substr) {
-			t.Errorf("Did not expect output to contain %q.\nOutput: %s", substr, output)
-		}
-	}
-
-	expectedSubstrings := []string{
-		`"province": "Guangdong"`,
-		`"city": "Shenzhen"`,
-		`"state": "California"`,
-		`"city": "Los Angeles"`,
-		`"foo_field": "FooValue"`,
-		`"bar_field": "BarValue"`,
-	}
-
-	for _, substr := range expectedSubstrings {
-		if !strings.Contains(output, substr) {
-			t.Errorf("Expected output to contain %q, but it did not.\nOutput: %s", substr, output)
+	for _, tt := range tests {
+		contains := strings.Contains(output, tt.substr)
+		if contains != tt.expected {
+			if tt.expected {
+				t.Errorf("Expected output to contain %q, but it did not.\nOutput: %s", tt.substr, output)
+			} else {
+				t.Errorf("Did not expect output to contain %q.\nOutput: %s", tt.substr, output)
+			}
 		}
 	}
 }

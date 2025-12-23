@@ -17,39 +17,64 @@ func TestSchema(t *testing.T) {
 
 	keys := slices.Collect(maps.Keys(schema.Properties))
 
-	if slices.Contains(keys, "China") {
-		t.Errorf("Expected 'China' not to be required in schema")
+	tests := []struct {
+		key      string
+		expected bool
+	}{
+		{"China", false},
+		{"USA", false},
+		{"city", true},
+		{"province", true},
+		{"state", true},
+		{"NestedFoo", false},
+		{"NestedBar", false},
+		{"foo_field", true},
+		{"bar_field", true},
 	}
 
-	if slices.Contains(keys, "USA") {
-		t.Errorf("Expected 'USA' not to be required in schema")
+	for _, tt := range tests {
+		if got := slices.Contains(keys, tt.key); got != tt.expected {
+			t.Errorf("For key '%s', expected presence: %v, got: %v", tt.key, tt.expected, got)
+		}
+	}
+}
+
+type SchemaWrapper struct {
+	Schema string `json:"$schema"`
+	Users  []User `json:"users"`
+}
+
+func TestSchemaWithWrapper(t *testing.T) {
+	schema, err := jsoninline.For[SchemaWrapper](&jsonschema.ForOptions{})
+	if err != nil {
+		t.Fatalf("Failed to generate schema: %v", err)
 	}
 
-	if !slices.Contains(keys, "city") {
-		t.Errorf("Expected 'city' to be present in schema")
+	usersSchema, ok := schema.Properties["users"]
+	if !ok {
+		t.Fatalf("Expected 'users' property in schema")
 	}
 
-	if !slices.Contains(keys, "province") {
-		t.Errorf("Expected 'province' to be present in schema")
+	keys := slices.Collect(maps.Keys(usersSchema.Items.Properties))
+
+	tests := []struct {
+		key      string
+		expected bool
+	}{
+		{"China", false},
+		{"USA", false},
+		{"city", true},
+		{"province", true},
+		{"state", true},
+		{"NestedFoo", false},
+		{"NestedBar", false},
+		{"foo_field", true},
+		{"bar_field", true},
 	}
 
-	if !slices.Contains(keys, "state") {
-		t.Errorf("Expected 'state' to be present in schema")
-	}
-
-	if slices.Contains(keys, "NestedFoo") {
-		t.Errorf("Expected 'NestedFoo' not to be required in schema")
-	}
-
-	if slices.Contains(keys, "NestedBar") {
-		t.Errorf("Expected 'NestedBar' not to be required in schema")
-	}
-
-	if !slices.Contains(keys, "foo_field") {
-		t.Errorf("Expected 'foo_field' to be present in schema")
-	}
-
-	if !slices.Contains(keys, "bar_field") {
-		t.Errorf("Expected 'bar_field' to be present in schema")
+	for _, tt := range tests {
+		if got := slices.Contains(keys, tt.key); got != tt.expected {
+			t.Errorf("For key '%s', expected presence: %v, got: %v", tt.key, tt.expected, got)
+		}
 	}
 }

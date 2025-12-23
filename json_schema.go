@@ -48,6 +48,20 @@ func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[r
 		if err != nil {
 			return nil, nil, err
 		}
+
+		// Handle pointers by processing the element type recursively.
+		if t.Kind() == reflect.Ptr {
+			elem := t.Elem()
+			newElem, innerMap, err := schemaType(elem, seen)
+			if err != nil {
+				return nil, nil, err
+			}
+			// propagate inner discovered schemas up to caller
+			if newElem == elem {
+				return t, innerMap, nil
+			}
+			return reflect.PointerTo(newElem), innerMap, nil
+		}
 		// propagate inner discovered schemas up to caller
 		if newElem == elem {
 			return t, innerMap, nil
@@ -145,6 +159,20 @@ func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[r
 				out = append(out, childSF)
 			}
 			continue
+		}
+
+		// Non-inline field: recursively process its type to apply any
+		// transformations (slices/arrays/pointers/structs).
+		newFieldType, innerMap, err := schemaType(f.Type, seen)
+		if err != nil {
+			return nil, nil, err
+		}
+		for k, v := range innerMap {
+			schemaMap[k] = v
+		}
+		if newFieldType != f.Type {
+			changed = true
+			sf.Type = newFieldType
 		}
 
 		out = append(out, sf)
