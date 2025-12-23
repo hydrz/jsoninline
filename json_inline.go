@@ -184,27 +184,11 @@ func unmarshal(data []byte, p any) error {
 			return errors.New("jsoninline: array length mismatch")
 		}
 		for i, raw := range raws {
-			if elemType.Kind() == reflect.Ptr && elemType.Elem().Kind() == reflect.Struct {
-				newElem := reflect.New(elemType.Elem()) // *T
-				im := &InlineMarshaler{V: newElem.Interface()}
-				if err := im.UnmarshalJSON(raw); err != nil {
-					return err
-				}
-				ve.Index(i).Set(newElem)
-			} else if elemType.Kind() == reflect.Struct {
-				newElemPtr := reflect.New(elemType)
-				im := &InlineMarshaler{V: newElemPtr.Interface()}
-				if err := im.UnmarshalJSON(raw); err != nil {
-					return err
-				}
-				ve.Index(i).Set(newElemPtr.Elem())
-			} else {
-				newElemPtr := reflect.New(elemType)
-				if err := unmarshalRaw(raw, newElemPtr.Interface()); err != nil {
-					return err
-				}
-				ve.Index(i).Set(newElemPtr.Elem())
+			elemVal, err := decodeElement(raw, elemType)
+			if err != nil {
+				return err
 			}
+			ve.Index(i).Set(elemVal)
 		}
 		return nil
 	}
@@ -248,11 +232,11 @@ func unmarshal(data []byte, p any) error {
 			// For inline fields, unmarshal the whole object into the inline struct.
 			if fv.Kind() == reflect.Ptr {
 				fv.Set(reflect.New(fv.Type().Elem()))
-				if err := json.Unmarshal(data, fv.Interface()); err != nil {
+				if err := unmarshal(data, fv.Interface()); err != nil {
 					return err
 				}
 			} else {
-				if err := json.Unmarshal(data, fv.Addr().Interface()); err != nil {
+				if err := unmarshal(data, fv.Addr().Interface()); err != nil {
 					return err
 				}
 			}
@@ -288,4 +272,31 @@ func unmarshalRaw(raw json.RawMessage, v interface{}) error {
 		return um.UnmarshalJSON(raw)
 	}
 	return json.Unmarshal(raw, v)
+}
+
+// decodeElement decodes a single JSON element into a reflect.Value suitable
+// for appending to a slice or setting into an array index. It handles
+// pointer-to-struct, struct, and other primitive/complex types uniformly.
+func decodeElement(raw json.RawMessage, elemType reflect.Type) (reflect.Value, error) {
+	if elemType.Kind() == reflect.Ptr && elemType.Elem().Kind() == reflect.Struct {
+		newElem := reflect.New(elemType.Elem())
+		im := &InlineMarshaler{V: newElem.Interface()}
+		if err := im.UnmarshalJSON(raw); err != nil {
+			return reflect.Value{}, err
+		}
+		return newElem, nil
+	} else if elemType.Kind() == reflect.Struct {
+		newElemPtr := reflect.New(elemType)
+		im := &InlineMarshaler{V: newElemPtr.Interface()}
+		if err := im.UnmarshalJSON(raw); err != nil {
+			return reflect.Value{}, err
+		}
+		return newElemPtr.Elem(), nil
+	}
+
+	newElemPtr := reflect.New(elemType)
+	if err := unmarshalRaw(raw, newElemPtr.Interface()); err != nil {
+		return reflect.Value{}, err
+	}
+	return newElemPtr.Elem(), nil
 }

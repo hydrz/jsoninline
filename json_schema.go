@@ -7,7 +7,6 @@ import (
 	_ "unsafe"
 
 	"github.com/google/jsonschema-go/jsonschema"
-	_ "github.com/google/jsonschema-go/jsonschema"
 )
 
 type jsonInfo struct {
@@ -38,21 +37,7 @@ func ForType(t reflect.Type, opts *jsonschema.ForOptions) (*jsonschema.Schema, e
 	for k, v := range schemaMap {
 		opts.TypeSchemas[k] = v
 	}
-	// Debug: print resulting struct fields to ensure inline worked.
-	fmt.Println("DEBUG: ForType resulting struct fields:")
-	if newT.Kind() == reflect.Struct {
-		for _, f := range reflect.VisibleFields(newT) {
-			fmt.Printf(" - %s (Anonymous=%v, Type=%v, Tag=%q)\n", f.Name, f.Anonymous, f.Type, f.Tag)
-		}
-	} else if newT.Kind() == reflect.Slice || newT.Kind() == reflect.Array {
-		elem := newT.Elem()
-		if elem.Kind() == reflect.Struct {
-			for _, f := range reflect.VisibleFields(elem) {
-				fmt.Printf(" - %s (Anonymous=%v, Type=%v, Tag=%q)\n", f.Name, f.Anonymous, f.Type, f.Tag)
-			}
-		}
-	}
-
+	// no debug output - return the possibly-transformed type for schema generation
 	return jsonschema.ForType(newT, opts)
 }
 func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[reflect.Type]*jsonschema.Schema, error) {
@@ -63,20 +48,15 @@ func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[r
 		if err != nil {
 			return nil, nil, err
 		}
-		// merge discovered schemas
-		schemaMap := make(map[reflect.Type]*jsonschema.Schema)
-		for k, v := range innerMap {
-			schemaMap[k] = v
-		}
-
+		// propagate inner discovered schemas up to caller
 		if newElem == elem {
-			return t, schemaMap, nil
+			return t, innerMap, nil
 		}
 		if t.Kind() == reflect.Slice {
-			return reflect.SliceOf(newElem), schemaMap, nil
+			return reflect.SliceOf(newElem), innerMap, nil
 		}
 		// array
-		return reflect.ArrayOf(t.Len(), newElem), schemaMap, nil
+		return reflect.ArrayOf(t.Len(), newElem), innerMap, nil
 	}
 
 	if t.Kind() != reflect.Struct {
@@ -152,7 +132,7 @@ func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[r
 					// If original inline field was a pointer to struct, keep the
 					// child field types as pointer where appropriate to reflect
 					// nullable behavior. Wrap struct child types in pointer.
-					childType = reflect.PtrTo(childType)
+					childType = reflect.PointerTo(childType)
 				}
 
 				childSF := reflect.StructField{

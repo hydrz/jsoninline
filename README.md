@@ -25,101 +25,80 @@ Example
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+    "encoding/json"
+    "fmt"
 
-	"github.com/hydrz/jsoninline"
+    "github.com/hydrz/jsoninline"
 )
 
 type DNSServerOption struct {
-	Type  string               `json:"type"`
-	Tag   string               `json:"tag"`
-	Local LocalDNSServerOption `json:",inline"`
-	UDP   UDPDNSServerOption   `json:",inline"`
-	TLS   TLSDNSServerOption   `json:",inline"`
+    Type  string               `json:"type"`
+    Tag   string               `json:"tag"`
+    Local LocalDNSServerOption `json:",inline"`
+    UDP   UDPDNSServerOption   `json:",inline"`
+    TLS   TLSDNSServerOption   `json:",inline"`
 }
 
 type LocalDNSServerOption struct {
-	PreferGO bool `json:"prefer_go,omitempty"`
+    PreferGO bool `json:"prefer_go,omitempty"`
 }
 
 type ServerOptions struct {
-	Server     string `json:"server,omitempty"`
-	ServerPort int    `json:"server_port,omitempty"`
+    Server     string `json:"server,omitempty"`
+    ServerPort int    `json:"server_port,omitempty"`
 }
 
 type UDPDNSServerOption struct {
-	ServerOptions
+    ServerOptions
 }
 
 type TLSDNSServerOption struct {
-	ServerOptions
-	TLS any `json:"tls,omitempty"`
+    ServerOptions
+    TLS any `json:"tls,omitempty"`
 }
 
 func main() {
-	options := []DNSServerOption{
-		{
-			Type: "local",
-			Tag:  "local-dns",
-			Local: LocalDNSServerOption{
-				PreferGO: true,
-			},
-		},
-		{
-			Type: "udp",
-			Tag:  "udp-dns",
-			UDP: UDPDNSServerOption{
-				ServerOptions: ServerOptions{
-					Server:     "1.1.1.1",
-					ServerPort: 53,
-				},
-			},
-		},
-		{
-			Type: "tls",
-			Tag:  "tls-dns",
-			TLS: TLSDNSServerOption{
-				ServerOptions: ServerOptions{
-					Server:     "dns.google",
-					ServerPort: 853,
-				},
-				TLS: map[string]interface{}{
-					"sni": "dns.google",
-				},
-			},
-		},
-	}
-	bytes, err := json.MarshalIndent(jsoninline.V(options), "", "  ")
-	if err != nil {
-		panic(err)
-	}
+    options := []DNSServerOption{
+        {
+            Type: "local",
+            Tag:  "local-dns",
+            Local: LocalDNSServerOption{
+                PreferGO: true,
+            },
+        },
+        {
+            Type: "udp",
+            Tag:  "udp-dns",
+            UDP: UDPDNSServerOption{
+                ServerOptions: ServerOptions{
+                    Server:     "1.1.1.1",
+                    ServerPort: 53,
+                },
+            },
+        },
+        {
+            Type: "tls",
+            Tag:  "tls-dns",
+            TLS: TLSDNSServerOption{
+                ServerOptions: ServerOptions{
+                    Server:     "dns.google",
+                    ServerPort: 853,
+                },
+                TLS: map[string]interface{}{
+                    "sni": "dns.google",
+                },
+            },
+        },
+    }
+    bytes, err := json.MarshalIndent(jsoninline.V(options), "", "  ")
+    if err != nil {
+        panic(err)
+    }
 
-	fmt.Println(string(bytes))
+    fmt.Println(string(bytes))
 
-	// Output:
-	// [
-	// 	{
-	// 	  "prefer_go": true,
-	// 	  "tag": "local-dns",
-	// 	  "type": "local"
-	// 	},
-	// 	{
-	// 	  "server": "1.1.1.1",
-	// 	  "server_port": 53,
-	// 	  "tag": "udp-dns",
-	// 	  "type": "udp"
-	// 	},
-	// 	{
-	// 	  "type": "tls"
-	// 	  "server": "dns.google",
-	// 	  "server_port": 853,
-	// 	  "tag": "tls-dns",
-	// 	  "tls": {
-	// 	     "sni": "dns.google"
-	// 	  },
-	// 	}
-	// ]
+    // Output:
+    // [ ... ]
 }
 ```
 
@@ -133,35 +112,35 @@ You can also use `jsoninline.V` when unmarshaling to populate structs that expec
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+    "encoding/json"
+    "fmt"
 
-	"github.com/hydrz/jsoninline"
+    "github.com/hydrz/jsoninline"
 )
 
 // Demonstrates unmarshaling JSON with inlined fields into Go structs
 // using jsoninline.V to wrap the destination.
 type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	China *China `json:",inline"`
-	USA   *USA   `json:",inline"`
+    ID    int    `json:"id"`
+    Name  string `json:"name"`
+    Email string `json:"email"`
+    China *China `json:",inline"`
+    USA   *USA   `json:",inline"`
 }
 
 func (u *User) String() string {
-	data, _ := json.Marshal(jsoninline.V(u))
-	return string(data)
+    data, _ := json.Marshal(jsoninline.V(u))
+    return string(data)
 }
 
 type China struct {
-	City     string `json:"city,omitempty"`
-	Province string `json:"province,omitempty"`
+    City     string `json:"city,omitempty"`
+    Province string `json:"province,omitempty"`
 }
 
 type USA struct {
-	City  string `json:"city,omitempty"`
-	State string `json:"state,omitempty"`
+    City  string `json:"city,omitempty"`
+    State string `json:"state,omitempty"`
 }
 
 var jsonData = `[
@@ -183,20 +162,72 @@ var jsonData = `[
 
 func main() {
 
-	var users []*User
-	if err := json.Unmarshal([]byte(jsonData), jsoninline.V(&users)); err != nil {
-		panic(err)
-	}
+    var users []*User
+    if err := json.Unmarshal([]byte(jsonData), jsoninline.V(&users)); err != nil {
+        panic(err)
+    }
 
-	for i, u := range users {
-		fmt.Printf("user %d: %+v\n", i, u)
-	}
-	// Output:
-	// user 0: {"city":"Shenzhen","email":"alice@example.com","id":1,"name":"Alice","province":"Guangdong"}
-	// user 1: {"city":"Los Angeles","email":"bob@example.com","id":2,"name":"Bob","state":"California"}
+    for i, u := range users {
+        fmt.Printf("user %d: %+v\n", i, u)
+    }
+    // Output:
+    // user 0: { ... }
 }
 ```
 
-License
+JSON Schema Usage
 
-See the `LICENSE` file in the repository.
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/jsonschema-go/jsonschema"
+	"github.com/hydrz/jsoninline"
+)
+
+// Example types mirroring test fixtures; used to demonstrate schema generation.
+type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	China *China `json:",inline"`
+	USA   *USA   `json:",inline"`
+}
+
+type China struct {
+	City      string     `json:"city,omitempty"`
+	Province  string     `json:"province,omitempty"`
+	NestedFoo *NestedFoo `json:",inline"`
+}
+
+type USA struct {
+	City      string     `json:"city,omitempty"`
+	State     string     `json:"state,omitempty"`
+	NestedBar *NestedBar `json:",inline"`
+}
+
+type NestedFoo struct {
+	FooField string `json:"foo_field,omitempty"`
+}
+
+type NestedBar struct {
+	BarField string `json:"bar_field,omitempty"`
+}
+
+func main() {
+	schema, err := jsoninline.For[User](&jsonschema.ForOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	// Marshal the schema to pretty JSON and print it.
+	b, err := json.MarshalIndent(schema, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(b))
+}
+```
