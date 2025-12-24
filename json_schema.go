@@ -1,8 +1,8 @@
 package jsoninline
 
 import (
-	"fmt"
 	"reflect"
+	"slices"
 
 	_ "unsafe"
 
@@ -24,167 +24,56 @@ func For[T any](opts *jsonschema.ForOptions) (*jsonschema.Schema, error) {
 }
 
 func ForType(t reflect.Type, opts *jsonschema.ForOptions) (*jsonschema.Schema, error) {
-	if opts == nil {
-		opts = &jsonschema.ForOptions{}
-	}
-	if opts.TypeSchemas == nil {
-		opts.TypeSchemas = make(map[reflect.Type]*jsonschema.Schema)
-	}
-	newT, schemaMap, err := schemaType(t, map[reflect.Type]bool{})
+
+	schema, err := jsonschema.ForType(t, opts)
 	if err != nil {
 		return nil, err
 	}
-	for k, v := range schemaMap {
-		opts.TypeSchemas[k] = v
+
+	if err := handleInline(t, schema); err != nil {
+		return nil, err
 	}
-	// no debug output - return the possibly-transformed type for schema generation
-	return jsonschema.ForType(newT, opts)
+
+	return schema, nil
 }
-func schemaType(t reflect.Type, seen map[reflect.Type]bool) (reflect.Type, map[reflect.Type]*jsonschema.Schema, error) {
-	// Handle slices/arrays by processing their element type recursively.
-	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
-		elem := t.Elem()
-		newElem, innerMap, err := schemaType(elem, seen)
-		if err != nil {
-			return nil, nil, err
-		}
 
-		// Handle pointers by processing the element type recursively.
-		if t.Kind() == reflect.Ptr {
-			elem := t.Elem()
-			newElem, innerMap, err := schemaType(elem, seen)
-			if err != nil {
-				return nil, nil, err
-			}
-			// propagate inner discovered schemas up to caller
-			if newElem == elem {
-				return t, innerMap, nil
-			}
-			return reflect.PointerTo(newElem), innerMap, nil
-		}
-		// propagate inner discovered schemas up to caller
-		if newElem == elem {
-			return t, innerMap, nil
-		}
-		if t.Kind() == reflect.Slice {
-			return reflect.SliceOf(newElem), innerMap, nil
-		}
-		// array
-		return reflect.ArrayOf(t.Len(), newElem), innerMap, nil
+func handleInline(t reflect.Type, schema *jsonschema.Schema) error {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
 	}
 
-	if t.Kind() != reflect.Struct {
-		return t, nil, nil
-	}
-
-	// Prevent infinite recursion on self-referential types.
-	if seen[t] {
-		return t, nil, nil
-	}
-	seen[t] = true
-
-	fields := reflect.VisibleFields(t)
-	out := make([]reflect.StructField, 0, len(fields))
-	schemaMap := make(map[reflect.Type]*jsonschema.Schema)
-	changed := false
-	// track inline inner types and their processed (possibly new) types
-
-	for _, f := range fields {
-		info := fieldJSONInfo(f)
-
-		// Copy the field and preserve exported/unexported status via PkgPath.
-		sf := reflect.StructField{
-			Name:      f.Name,
-			Type:      f.Type,
-			Tag:       f.Tag,
-			PkgPath:   f.PkgPath,
-			Anonymous: f.Anonymous,
-		}
-
-		if info.settings["inline"] {
-			// For inline-tagged fields we expand the inner struct's visible fields
-			// into the parent struct so JSON Schema generation sees the properties
-			// directly (avoids promotion conflicts when multiple inlined structs
-			// contain the same field name).
-			changed = true
-
-			// Determine inner element type (dereference pointers)
-			inner := f.Type
-			ptrWrapped := false
-			if inner.Kind() == reflect.Ptr {
-				inner = inner.Elem()
-				ptrWrapped = true
+	switch t.Kind() {
+	case reflect.Array, reflect.Slice:
+		elemType := t.Elem()
+		return handleInline(elemType, schema.Items)
+	case reflect.Struct:
+		for _, field := range reflect.VisibleFields(t) {
+			info := fieldJSONInfo(field)
+			if info.omit {
+				continue
 			}
 
-			// Recursively process the inner type to handle nested inline fields.
-			newInner, innerMap, err := schemaType(inner, seen)
-			if err != nil {
-				return nil, nil, err
-			}
-			// merge any discovered schemas
-			for k, v := range innerMap {
-				schemaMap[k] = v
+			propSchema, ok := schema.Properties[info.name]
+			if !ok {
+				continue
 			}
 
-			// Append each visible exported field from the inner type as a new
-			// field on the parent struct. Use a unique Go field name to avoid
-			// collisions while preserving the original JSON tag.
-			for _, cf := range reflect.VisibleFields(newInner) {
-				if cf.PkgPath != "" { // unexported
-					continue
-				}
-				cinfo := fieldJSONInfo(cf)
-				if cinfo.omit {
-					continue
+			if info.settings["inline"] {
+				if schema.OneOf == nil {
+					schema.OneOf = make([]*jsonschema.Schema, 0)
 				}
 
-				// Unique Go field name to avoid duplicate names in the generated struct.
-				uniqueName := fmt.Sprintf("%s_%s", f.Name, cf.Name)
-
-				childType := cf.Type
-				if ptrWrapped && childType.Kind() == reflect.Struct {
-					// If original inline field was a pointer to struct, keep the
-					// child field types as pointer where appropriate to reflect
-					// nullable behavior. Wrap struct child types in pointer.
-					childType = reflect.PointerTo(childType)
-				}
-
-				childSF := reflect.StructField{
-					Name:      uniqueName,
-					Type:      childType,
-					Tag:       cf.Tag,
-					PkgPath:   "",
-					Anonymous: false,
-				}
-				out = append(out, childSF)
+				schema.OneOf = append(schema.OneOf, propSchema)
+				delete(schema.Properties, info.name)
+				schema.Required = slices.DeleteFunc(schema.Required, func(s string) bool {
+					return s == info.name
+				})
 			}
-			continue
-		}
 
-		// Non-inline field: recursively process its type to apply any
-		// transformations (slices/arrays/pointers/structs).
-		newFieldType, innerMap, err := schemaType(f.Type, seen)
-		if err != nil {
-			return nil, nil, err
+			if err := handleInline(field.Type, propSchema); err != nil {
+				return err
+			}
 		}
-		for k, v := range innerMap {
-			schemaMap[k] = v
-		}
-		if newFieldType != f.Type {
-			changed = true
-			sf.Type = newFieldType
-		}
-
-		out = append(out, sf)
 	}
-
-	if !changed {
-		return t, nil, nil
-	}
-
-	// Build a new struct type with the modified Anonymous flags.
-	// Note: reflect.Type is immutable, so we create a new one instead of mutating.
-	newT := reflect.StructOf(out)
-
-	return newT, schemaMap, nil
+	return nil
 }

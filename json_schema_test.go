@@ -9,34 +9,34 @@ import (
 	"github.com/hydrz/jsoninline"
 )
 
-func TestSchema(t *testing.T) {
-	schema, err := jsoninline.For[User](&jsonschema.ForOptions{})
-	if err != nil {
-		t.Fatalf("Failed to generate schema: %v", err)
-	}
+type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	China *China `json:",inline"`
+	USA   *USA   `json:",inline"`
+}
 
-	keys := slices.Collect(maps.Keys(schema.Properties))
+type China struct {
+	City      string     `json:"city,omitempty"`
+	Province  string     `json:"province,omitempty"`
+	NestedFoo *NestedFoo `json:",inline"`
+	NestedBar *NestedBar `json:",inline"`
+}
 
-	tests := []struct {
-		key      string
-		expected bool
-	}{
-		{"China", false},
-		{"USA", false},
-		{"city", true},
-		{"province", true},
-		{"state", true},
-		{"NestedFoo", false},
-		{"NestedBar", false},
-		{"foo_field", true},
-		{"bar_field", true},
-	}
+type USA struct {
+	City      string     `json:"city,omitempty"`
+	State     string     `json:"state,omitempty"`
+	NestedFoo *NestedFoo `json:",inline"`
+	NestedBar *NestedBar `json:",inline"`
+}
 
-	for _, tt := range tests {
-		if got := slices.Contains(keys, tt.key); got != tt.expected {
-			t.Errorf("For key '%s', expected presence: %v, got: %v", tt.key, tt.expected, got)
-		}
-	}
+type NestedFoo struct {
+	FooField string `json:"foo_field,omitempty"`
+}
+
+type NestedBar struct {
+	BarField string `json:"bar_field,omitempty"`
 }
 
 type SchemaWrapper struct {
@@ -44,37 +44,40 @@ type SchemaWrapper struct {
 	Users  []User `json:"users"`
 }
 
-func TestSchemaWithWrapper(t *testing.T) {
+func TestSchema(t *testing.T) {
 	schema, err := jsoninline.For[SchemaWrapper](&jsonschema.ForOptions{})
 	if err != nil {
 		t.Fatalf("Failed to generate schema: %v", err)
 	}
 
-	usersSchema, ok := schema.Properties["users"]
-	if !ok {
-		t.Fatalf("Expected 'users' property in schema")
-	}
-
-	keys := slices.Collect(maps.Keys(usersSchema.Items.Properties))
-
 	tests := []struct {
-		key      string
-		expected bool
+		schema *jsonschema.Schema
+		props  []string
 	}{
-		{"China", false},
-		{"USA", false},
-		{"city", true},
-		{"province", true},
-		{"state", true},
-		{"NestedFoo", false},
-		{"NestedBar", false},
-		{"foo_field", true},
-		{"bar_field", true},
+		{
+			schema: schema,
+			props:  []string{"$schema", "users"},
+		},
+		{
+			schema: schema.Properties["users"].Items,
+			props:  []string{"id", "name", "email"},
+		},
+		{
+			schema: schema.Properties["users"].Items.OneOf[0],
+			props:  []string{"province", "city"},
+		},
+		{
+			schema: schema.Properties["users"].Items.OneOf[1],
+			props:  []string{"state", "city"},
+		},
 	}
 
 	for _, tt := range tests {
-		if got := slices.Contains(keys, tt.key); got != tt.expected {
-			t.Errorf("For key '%s', expected presence: %v, got: %v", tt.key, tt.expected, got)
+		actualProps := slices.Collect(maps.Keys(tt.schema.Properties))
+		slices.Sort(actualProps)
+		slices.Sort(tt.props)
+		if !slices.Equal(actualProps, tt.props) {
+			t.Errorf("Expected properties %v, got %v", tt.props, actualProps)
 		}
 	}
 }

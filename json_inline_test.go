@@ -9,36 +9,6 @@ import (
 	"github.com/hydrz/jsoninline"
 )
 
-type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	China *China `json:",inline"`
-	USA   *USA   `json:",inline"`
-}
-
-type China struct {
-	City      string     `json:"city,omitempty"`
-	Province  string     `json:"province,omitempty"`
-	NestedFoo *NestedFoo `json:",inline"`
-	NestedBar *NestedBar `json:",inline"`
-}
-
-type USA struct {
-	City      string     `json:"city,omitempty"`
-	State     string     `json:"state,omitempty"`
-	NestedFoo *NestedFoo `json:",inline"`
-	NestedBar *NestedBar `json:",inline"`
-}
-
-type NestedFoo struct {
-	FooField string `json:"foo_field,omitempty"`
-}
-
-type NestedBar struct {
-	BarField string `json:"bar_field,omitempty"`
-}
-
 func TestMarshaler(t *testing.T) {
 	users := []User{
 		{
