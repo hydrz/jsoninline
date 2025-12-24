@@ -24,7 +24,6 @@ func For[T any](opts *jsonschema.ForOptions) (*jsonschema.Schema, error) {
 }
 
 func ForType(t reflect.Type, opts *jsonschema.ForOptions) (*jsonschema.Schema, error) {
-
 	schema, err := jsonschema.ForType(t, opts)
 	if err != nil {
 		return nil, err
@@ -47,6 +46,8 @@ func handleInline(t reflect.Type, schema *jsonschema.Schema) error {
 		elemType := t.Elem()
 		return handleInline(elemType, schema.Items)
 	case reflect.Struct:
+		var anyOf []*jsonschema.Schema
+
 		for _, field := range reflect.VisibleFields(t) {
 			info := fieldJSONInfo(field)
 			if info.omit {
@@ -59,11 +60,7 @@ func handleInline(t reflect.Type, schema *jsonschema.Schema) error {
 			}
 
 			if info.settings["inline"] {
-				if schema.OneOf == nil {
-					schema.OneOf = make([]*jsonschema.Schema, 0)
-				}
-
-				schema.OneOf = append(schema.OneOf, propSchema)
+				anyOf = append(anyOf, propSchema)
 				delete(schema.Properties, info.name)
 				schema.Required = slices.DeleteFunc(schema.Required, func(s string) bool {
 					return s == info.name
@@ -73,6 +70,17 @@ func handleInline(t reflect.Type, schema *jsonschema.Schema) error {
 			if err := handleInline(field.Type, propSchema); err != nil {
 				return err
 			}
+		}
+
+		schema.AdditionalProperties = nil
+		if len(anyOf) > 0 {
+			cloned := schema.CloneSchemas()
+			schema.Type = ""
+			schema.Properties = nil
+			schema.Required = nil
+			schema.AllOf = append(schema.AllOf, cloned)
+
+			schema.AllOf = append(schema.AllOf, &jsonschema.Schema{AnyOf: anyOf})
 		}
 	}
 	return nil
